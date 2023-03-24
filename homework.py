@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import time
+from http import HTTPStatus
 
 import requests
 import telegram
@@ -23,6 +24,7 @@ load_dotenv()
 PRACTICUM_TOKEN = os.getenv("PRACTICUM_TOKEN")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 
 RETRY_PERIOD = 600
 ENDPOINT = "https://practicum.yandex.ru/api/user_api/homework_statuses/"
@@ -52,13 +54,8 @@ def check_tokens():
     Если отсутствует хотя бы одна переменная необходимая для работы программы
     окружения — бот не должен запускаться.
     """
-    if (
-        PRACTICUM_TOKEN is None
-        or TELEGRAM_TOKEN is None
-        or TELEGRAM_CHAT_ID is None
-    ):
-        return False
-    return True
+    tokens = [PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]
+    return all(tokens)
 
 
 def send_message(bot, message):
@@ -87,39 +84,47 @@ def get_api_answer(timestamp):
         raise BotHomeworkException(
             "error", f"Не удалось получить ответ от сервиса. Ошибка: {error}"
         )
-    if response.status_code != 200:
-        logger.error(
-            f"Не удалось получить ответ от сервиса. Статус код: "
-            f"{response.status_code}"
-        )
-        raise BotHomeworkException(
-            "error",
-            f"Ошибка status_code: {response.status_code}",
-        )
-    return response.json()
+    else:
+        if response.status_code != HTTPStatus.OK:
+            logger.error(
+                f"Не удалось получить ответ от сервиса. Статус код: "
+                f"{response.status_code}"
+            )
+            raise BotHomeworkException(
+                "error",
+                f"Ошибка status_code: {response.status_code}",
+            )
+        return response.json()
 
 
 def check_response(response):
     """Проверяет ответ API на соответствие документации."""
     if not isinstance(response, dict):
-        logger.error("Не удалось получить ответ API в формате dict.")
         raise TypeError(
             "error", "Не удалось получить ответ API в формате dict."
         )
     elif "homeworks" not in response or "current_date" not in response:
         logger.error("В ответе API нет ключей 'homeworks' или 'current_date'.")
         raise ValueError(
-            "error", ("В словаре ответа от сервиса нет ключа 'homeworks' или"
-                      "'current_date'."),
+            "error",
+            (
+                "В словаре ответа от сервиса нет ключа 'homeworks' или"
+                "'current_date'."
+            ),
         )
-    elif not isinstance(response.get("homeworks"), list):
-        logger.error(
-            "В ответе от сервиса ключ 'homeworks' не является типом list.")
+    homeworks = response.get("homeworks")
+    no_new_message = "Нет новых домашних работ."
+    if not isinstance(homeworks, list):
         raise TypeError(
             "error",
             "В словаре ответа от сервиса ключ 'homeworks' не содержит список.",
         )
-    return response.get("homeworks")
+    if homeworks == []:
+        logger.debug(no_new_message)
+        message = no_new_message
+    else:
+        message = parse_status(homeworks[0])
+    return message
 
 
 def parse_status(homework):
@@ -150,31 +155,27 @@ def main():
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
     previous_message = ""
-    no_new_message = "Нет новых домашних работ."
     while True:
         try:
             logger.info("Начало проверки нового статуса работы.")
             response = get_api_answer(timestamp)
-            homeworks = check_response(response)
-            if homeworks == []:
-                logger.debug(no_new_message)
-                message = no_new_message
-            else:
-                message = parse_status(homeworks[0])
+            message = check_response(response)
             if previous_message != message:
-                previous_message = message
-                logger.info("Статус проверки работы изменился. Переход в "
-                            "функцию send_message.")
+                logger.info(
+                    "Статус проверки работы изменился. Переход в "
+                    "функцию send_message."
+                )
                 send_message(bot, message)
+                previous_message = message
             else:
                 logger.debug("Статус проверки работы не изменился.")
         except Exception as error:
             message = f"Что то пошло не так. Ошибка: {error}"
             logger.error(message)
+        finally:
             if previous_message != message:
                 previous_message = message
                 send_message(bot, message)
-        finally:
             time.sleep(RETRY_PERIOD)
 
 

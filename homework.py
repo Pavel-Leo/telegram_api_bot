@@ -12,9 +12,9 @@ import sys
 import time
 from http import HTTPStatus
 
+from dotenv import load_dotenv
 import requests
 import telegram
-from dotenv import load_dotenv
 
 from exception import BotHomeworkException
 

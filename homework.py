@@ -75,21 +75,15 @@ def send_message(bot, message):
 def get_api_answer(timestamp):
     """Делает запрос к единственному эндпоинту API-сервиса."""
     try:
-        logger.debug("Запрос на получение ответа от сервиса.")
         response = requests.get(
             ENDPOINT, headers=HEADERS, params={"from_date": timestamp}
         )
     except Exception as error:
-        logger.error(f"Не удалось получить ответ от сервиса. Ошибка: {error}")
         raise BotHomeworkException(
             "error", f"Не удалось получить ответ от сервиса. Ошибка: {error}"
         )
     else:
         if response.status_code != HTTPStatus.OK:
-            logger.error(
-                f"Не удалось получить ответ от сервиса. Статус код: "
-                f"{response.status_code}"
-            )
             raise BotHomeworkException(
                 "error",
                 f"Ошибка status_code: {response.status_code}",
@@ -104,7 +98,6 @@ def check_response(response):
             "error", "Не удалось получить ответ API в формате dict."
         )
     elif "homeworks" not in response or "current_date" not in response:
-        logger.error("В ответе API нет ключей 'homeworks' или 'current_date'.")
         raise ValueError(
             "error",
             (
@@ -132,18 +125,15 @@ def parse_status(homework):
     homework_name = homework.get("homework_name")
     homework_status = homework.get("status")
     if "homework_name" not in homework:
-        logger.error("Не удалось получить имя домашней работы.")
         raise KeyError(
             "В ответе от сервиса не содержится значение 'homework_name'."
         )
     if homework_status not in HOMEWORK_VERDICTS:
-        logger.error("Получен неизвестный статус для имени домашней работы.")
         raise BotHomeworkException(
             "error",
             f"Ответ содержит незадокументированный статус'{homework_status}'.",
         )
     verdict = HOMEWORK_VERDICTS.get(homework_status)
-    logger.debug(f"Извлечен статус домашней работы: {verdict}.")
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -160,22 +150,15 @@ def main():
             logger.info("Начало проверки нового статуса работы.")
             response = get_api_answer(timestamp)
             message = check_response(response)
-            if previous_message != message:
-                logger.info(
-                    "Статус проверки работы изменился. Переход в "
-                    "функцию send_message."
-                )
-                send_message(bot, message)
-                previous_message = message
-            else:
-                logger.debug("Статус проверки работы не изменился.")
         except Exception as error:
             message = f"Что то пошло не так. Ошибка: {error}"
             logger.error(message)
         finally:
             if previous_message != message:
-                previous_message = message
                 send_message(bot, message)
+                previous_message = message
+            else:
+                logger.debug("Статус проверки работы не изменился.")
             time.sleep(RETRY_PERIOD)
 
 

@@ -17,8 +17,8 @@
 
 ```
 git clone git@github.com:Pavel-Leo/telegram_api_bot.git
-```
-cd Personal_diary_service
+
+cd telegram_api_bot
 ```
 
 Cоздать и активировать виртуальное окружение:
@@ -40,9 +40,8 @@ python3 -m pip install --upgrade pip (для mac и linux)
 python -m pip install --upgrade pip (для windows)
 ```
 
-```
 перейти в дирректорию где хранится файл requirements.txt и оттуда выполнить команду:
-
+```
 pip install -r requirements.txt
 ```
 
